@@ -1,0 +1,73 @@
+-- Floatv2 GUI Script para Executor (KRNL)
+-- By ChatGPT
+
+-- Criar a GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "Floatv2"
+ScreenGui.Parent = game.CoreGui
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 200, 0, 100)
+Frame.Position = UDim2.new(0.4, 0, 0.4, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Frame.BorderSizePixel = 0
+Frame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner", Frame)
+UICorner.CornerRadius = UDim.new(0, 12)
+
+local Button = Instance.new("TextButton")
+Button.Size = UDim2.new(0, 180, 0, 40)
+Button.Position = UDim2.new(0, 10, 0, 30)
+Button.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+Button.TextScaled = true
+Button.Font = Enum.Font.GothamBold
+Button.Text = "Ativar Flutuação"
+Button.Parent = Frame
+
+local UICorner2 = Instance.new("UICorner", Button)
+UICorner2.CornerRadius = UDim.new(0, 8)
+
+-- Sistema de flutuação
+local Player = game.Players.LocalPlayer
+local Char = Player.Character or Player.CharacterAdded:Wait()
+local Hum = Char:WaitForChild("Humanoid")
+local HRP = Char:WaitForChild("HumanoidRootPart")
+
+local FloatAtivo = false
+local BodyVel = nil
+local gravidade = 1 -- menor = cai devagar
+local impulso = 30 -- altura por pulo
+
+-- Toggle do botão
+Button.MouseButton1Click:Connect(function()
+	FloatAtivo = not FloatAtivo
+	if FloatAtivo then
+		Button.Text = "Desativar Flutuação"
+	else
+		Button.Text = "Ativar Flutuação"
+		if BodyVel then
+			BodyVel:Destroy()
+			BodyVel = nil
+		end
+	end
+end)
+
+-- Flutuação no espaço
+game:GetService("UserInputService").JumpRequest:Connect(function()
+	if FloatAtivo then
+		if not BodyVel then
+			BodyVel = Instance.new("BodyVelocity")
+			BodyVel.MaxForce = Vector3.new(0, math.huge, 0)
+			BodyVel.Velocity = Vector3.new(0,0,0)
+			BodyVel.Parent = HRP
+		end
+		
+		-- Sobe
+		BodyVel.Velocity = Vector3.new(0, impulso, 0)
+		wait(0.3)
+		-- Cai devagar
+		BodyVel.Velocity = Vector3.new(0, -gravidade, 0)
+	end
+end)
