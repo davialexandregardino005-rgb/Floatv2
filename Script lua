@@ -1,73 +1,350 @@
--- Floatv2 GUI Script para Executor (KRNL)
--- By ChatGPT
+-- Floatv2 Executor — GUI arrastável + sliders e hotkey
+-- Cole no seu executor (KRNL, Synapse, etc.)
 
--- Criar a GUI
+-- limpeza caso já exista
+if game.CoreGui:FindFirstChild("Floatv2") then
+    pcall(function() game.CoreGui:FindFirstChild("Floatv2"):Destroy() end)
+end
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+local humanoid = char:WaitForChild("Humanoid")
+
+-- valores configuráveis (padrão)
+local gravidade = 1       -- quanto menor => cai mais devagar
+local impulso = 30       -- força do pulo/impulso
+local floatAtivo = false
+local hotkey = Enum.KeyCode.F
+
+local bodyVel = nil
+local jumpConnection = nil
+local charAddedConn = nil
+
+-- cria GUI
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "Floatv2"
 ScreenGui.Parent = game.CoreGui
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 200, 0, 100)
-Frame.Position = UDim2.new(0.4, 0, 0.4, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Frame.BorderSizePixel = 0
-Frame.Parent = ScreenGui
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, 300, 0, 180)
+Main.Position = UDim2.new(0.4, 0, 0.3, 0)
+Main.BackgroundColor3 = Color3.fromRGB(30,30,35)
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
 
-local UICorner = Instance.new("UICorner", Frame)
-UICorner.CornerRadius = UDim.new(0, 12)
+local UICorner = Instance.new("UICorner", Main)
+UICorner.CornerRadius = UDim.new(0,14)
 
-local Button = Instance.new("TextButton")
-Button.Size = UDim2.new(0, 180, 0, 40)
-Button.Position = UDim2.new(0, 10, 0, 30)
-Button.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
-Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-Button.TextScaled = true
-Button.Font = Enum.Font.GothamBold
-Button.Text = "Ativar Flutuação"
-Button.Parent = Frame
+-- Título
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1, -20, 0, 36)
+Title.Position = UDim2.new(0, 10, 0, 6)
+Title.BackgroundTransparency = 1
+Title.Text = "Floatv2"
+Title.TextColor3 = Color3.fromRGB(230,230,230)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 18
+Title.TextXAlignment = Enum.TextXAlignment.Left
 
-local UICorner2 = Instance.new("UICorner", Button)
-UICorner2.CornerRadius = UDim.new(0, 8)
+-- Close button
+local CloseBtn = Instance.new("TextButton", Main)
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -38, 0, 6)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200,60,60)
+CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 16
+CloseBtn.TextColor3 = Color3.fromRGB(255,255,255)
+local _ = Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0,8)
 
--- Sistema de flutuação
-local Player = game.Players.LocalPlayer
-local Char = Player.Character or Player.CharacterAdded:Wait()
-local Hum = Char:WaitForChild("Humanoid")
-local HRP = Char:WaitForChild("HumanoidRootPart")
+-- Toggle Button
+local Toggle = Instance.new("TextButton", Main)
+Toggle.Size = UDim2.new(0, 140, 0, 36)
+Toggle.Position = UDim2.new(0, 10, 0, 48)
+Toggle.BackgroundColor3 = Color3.fromRGB(70,130,255)
+Toggle.TextColor3 = Color3.fromRGB(255,255,255)
+Toggle.Font = Enum.Font.GothamBold
+Toggle.TextSize = 16
+Toggle.Text = "Ativar Flutuação"
+Instance.new("UICorner", Toggle).CornerRadius = UDim.new(0,8)
 
-local FloatAtivo = false
-local BodyVel = nil
-local gravidade = 1 -- menor = cai devagar
-local impulso = 30 -- altura por pulo
+-- Hotkey button
+local KeyBtn = Instance.new("TextButton", Main)
+KeyBtn.Size = UDim2.new(0, 120, 0, 28)
+KeyBtn.Position = UDim2.new(0, 165, 0, 52)
+KeyBtn.BackgroundColor3 = Color3.fromRGB(50,50,60)
+KeyBtn.TextColor3 = Color3.fromRGB(230,230,230)
+KeyBtn.Font = Enum.Font.Gotham
+KeyBtn.TextSize = 13
+KeyBtn.Text = ("Hotkey: %s"):format(tostring(hotkey):gsub("Enum.KeyCode.",""))
+Instance.new("UICorner", KeyBtn).CornerRadius = UDim.new(0,6)
 
--- Toggle do botão
-Button.MouseButton1Click:Connect(function()
-	FloatAtivo = not FloatAtivo
-	if FloatAtivo then
-		Button.Text = "Desativar Flutuação"
-	else
-		Button.Text = "Ativar Flutuação"
-		if BodyVel then
-			BodyVel:Destroy()
-			BodyVel = nil
-		end
-	end
+-- Gravidade slider (label + bar)
+local GravLabel = Instance.new("TextLabel", Main)
+GravLabel.Size = UDim2.new(1, -20, 0, 20)
+GravLabel.Position = UDim2.new(0, 10, 0, 96)
+GravLabel.BackgroundTransparency = 1
+GravLabel.Text = ("Gravidade: %.2f"):format(gravidade)
+GravLabel.TextColor3 = Color3.fromRGB(220,220,220)
+GravLabel.Font = Enum.Font.Gotham
+GravLabel.TextSize = 14
+GravLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local GravBar = Instance.new("Frame", Main)
+GravBar.Size = UDim2.new(1, -20, 0, 14)
+GravBar.Position = UDim2.new(0, 10, 0, 118)
+GravBar.BackgroundColor3 = Color3.fromRGB(45,45,50)
+Instance.new("UICorner", GravBar).CornerRadius = UDim.new(0,6)
+
+local GravKnob = Instance.new("Frame", GravBar)
+GravKnob.Size = UDim2.new(0, 18, 1, 0)
+GravKnob.Position = UDim2.new(0.2, 0, 0, 0)
+GravKnob.BackgroundColor3 = Color3.fromRGB(180,180,180)
+Instance.new("UICorner", GravKnob).CornerRadius = UDim.new(0,6)
+
+-- Impulso slider
+local ImpLabel = Instance.new("TextLabel", Main)
+ImpLabel.Size = UDim2.new(1, -20, 0, 20)
+ImpLabel.Position = UDim2.new(0, 10, 0, 140)
+ImpLabel.BackgroundTransparency = 1
+ImpLabel.Text = ("Impulso: %d"):format(impulso)
+ImpLabel.TextColor3 = Color3.fromRGB(220,220,220)
+ImpLabel.Font = Enum.Font.Gotham
+ImpLabel.TextSize = 14
+ImpLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local ImpBar = Instance.new("Frame", Main)
+ImpBar.Size = UDim2.new(1, -20, 0, 14)
+ImpBar.Position = UDim2.new(0, 10, 0, 162)
+ImpBar.BackgroundColor3 = Color3.fromRGB(45,45,50)
+Instance.new("UICorner", ImpBar).CornerRadius = UDim.new(0,6)
+
+local ImpKnob = Instance.new("Frame", ImpBar)
+ImpKnob.Size = UDim2.new(0.3, 0, 1, 0)
+ImpKnob.Position = UDim2.new(impulso/100, 0, 0, 0)
+ImpKnob.BackgroundColor3 = Color3.fromRGB(180,180,180)
+Instance.new("UICorner", ImpKnob).CornerRadius = UDim.new(0,6)
+
+-- small helper to set knob position based on value range
+local function setKnobFromValue(bar, knob, value, minV, maxV)
+    local frac = math.clamp((value - minV)/(maxV - minV), 0, 1)
+    knob.Position = UDim2.new(frac, 0, 0, 0)
+end
+
+-- init knob positions
+setKnobFromValue(GravBar, GravKnob, gravidade, 0, 5)
+setKnobFromValue(ImpBar, ImpKnob, impulso, 0, 100)
+
+-- Dragging the main frame
+do
+    local dragging, dragStart, startPos
+    Main.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = Main.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    Main.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            if dragging and dragStart and startPos then
+                local delta = input.Position - dragStart
+                Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end
+    end)
+end
+
+-- slider logic (generic)
+local function enableSlider(bar, knob, minV, maxV, onUpdate)
+    local dragging = false
+    local function updateFromInput(inputPos)
+        local absPos = bar.AbsolutePosition
+        local size = bar.AbsoluteSize
+        local x = math.clamp((inputPos.X - absPos.X) / size.X, 0, 1)
+        knob.Position = UDim2.new(x, 0, 0, 0)
+        local value = minV + (maxV - minV) * x
+        onUpdate(value)
+    end
+
+    knob.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            updateFromInput(input.Position)
+            dragging = true
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateFromInput(input.Position)
+        end
+    end)
+end
+
+-- atualiza/garante bodyVel existe
+local function ensureBodyVel()
+    if not bodyVel then
+        bodyVel = Instance.new("BodyVelocity")
+        bodyVel.MaxForce = Vector3.new(0, math.huge, 0)
+        bodyVel.Velocity = Vector3.new(0,0,0)
+        bodyVel.Parent = hrp
+    end
+end
+
+local function disableBodyVel()
+    if bodyVel then
+        pcall(function() bodyVel:Destroy() end)
+        bodyVel = nil
+    end
+end
+
+-- função de pulo/impulso
+local function onJumpRequest()
+    if not floatAtivo then return end
+    ensureBodyVel()
+    bodyVel.Velocity = Vector3.new(0, impulso, 0)
+    -- mantém impulso curto e depois aplica "queda controlada"
+    task.spawn(function()
+        task.wait(0.28)
+        if bodyVel then
+            bodyVel.Velocity = Vector3.new(0, -gravidade, 0)
+        end
+    end)
+end
+
+-- ativa/desativa flutuação
+local function toggleFloat()
+    floatAtivo = not floatAtivo
+    if floatAtivo then
+        Toggle.Text = "Desativar Flutuação"
+        ensureBodyVel()
+        -- conecta JumpRequest se não conectado
+        if not jumpConnection then
+            jumpConnection = UserInputService.JumpRequest:Connect(onJumpRequest)
+        end
+    else
+        Toggle.Text = "Ativar Flutuação"
+        disableBodyVel()
+        if jumpConnection then
+            jumpConnection:Disconnect()
+            jumpConnection = nil
+        end
+    end
+end
+
+Toggle.MouseButton1Click:Connect(toggleFloat)
+
+-- hotkey listener
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == hotkey then
+        toggleFloat()
+    end
 end)
 
--- Flutuação no espaço
-game:GetService("UserInputService").JumpRequest:Connect(function()
-	if FloatAtivo then
-		if not BodyVel then
-			BodyVel = Instance.new("BodyVelocity")
-			BodyVel.MaxForce = Vector3.new(0, math.huge, 0)
-			BodyVel.Velocity = Vector3.new(0,0,0)
-			BodyVel.Parent = HRP
-		end
-		
-		-- Sobe
-		BodyVel.Velocity = Vector3.new(0, impulso, 0)
-		wait(0.3)
-		-- Cai devagar
-		BodyVel.Velocity = Vector3.new(0, -gravidade, 0)
-	end
+-- change hotkey on click (listen next key)
+local waitingForKey = false
+KeyBtn.MouseButton1Click:Connect(function()
+    if waitingForKey then return end
+    KeyBtn.Text = "Pressione uma tecla..."
+    waitingForKey = true
+    local conn
+    conn = UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            hotkey = input.KeyCode
+            KeyBtn.Text = ("Hotkey: %s"):format(tostring(hotkey):gsub("Enum.KeyCode.",""))
+            waitingForKey = false
+            conn:Disconnect()
+        end
+    end)
 end)
+
+-- sliders hookup
+enableSlider(GravBar, GravKnob, 0, 5, function(val)
+    gravidade = tonumber(string.format("%.2f", val))
+    GravLabel.Text = ("Gravidade: %.2f"):format(gravidade)
+    if bodyVel and not floatAtivo then
+        -- não precisa fazer nada se não ativo
+    end
+end)
+
+enableSlider(ImpBar, ImpKnob, 0, 100, function(val)
+    impulso = math.floor(val + 0.5)
+    ImpLabel.Text = ("Impulso: %d"):format(impulso)
+end)
+
+-- Close button
+CloseBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        if jumpConnection then jumpConnection:Disconnect() end
+        if charAddedConn then charAddedConn:Disconnect() end
+        disableBodyVel()
+        ScreenGui:Destroy()
+    end)
+end)
+
+-- Reset button (duplo clique toggle position)
+local ResetBtn = Instance.new("TextButton", Main)
+ResetBtn.Size = UDim2.new(0, 60, 0, 24)
+ResetBtn.Position = UDim2.new(1, -70, 0, 48)
+ResetBtn.BackgroundColor3 = Color3.fromRGB(80,80,90)
+ResetBtn.Text = "Reset"
+ResetBtn.Font = Enum.Font.Gotham
+ResetBtn.TextSize = 13
+Instance.new("UICorner", ResetBtn).CornerRadius = UDim.new(0,6)
+ResetBtn.MouseButton1Click:Connect(function()
+    gravidade = 1
+    impulso = 30
+    GravLabel.Text = ("Gravidade: %.2f"):format(gravidade)
+    ImpLabel.Text = ("Impulso: %d"):format(impulso)
+    setKnobFromValue(GravBar, GravKnob, gravidade, 0, 5)
+    setKnobFromValue(ImpBar, ImpKnob, impulso, 0, 100)
+end)
+
+-- garante reconexão se respawnar
+charAddedConn = player.CharacterAdded:Connect(function(c)
+    char = c
+    hrp = char:WaitForChild("HumanoidRootPart")
+    humanoid = char:WaitForChild("Humanoid")
+    -- se estava ativo, recria bodyVel
+    if floatAtivo then
+        disableBodyVel()
+        ensureBodyVel()
+    end
+end)
+
+-- Proteção: evita erros ao aplicar BodyVelocity se o personagem morrer
+humanoid.Died:Connect(function()
+    disableBodyVel()
+end)
+
+-- mensagem de pronto
+print("[Floatv2] GUI carregada. Use o botão ou a hotkey para ativar.")
